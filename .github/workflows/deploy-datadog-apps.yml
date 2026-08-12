@@ -1,0 +1,145 @@
+name: Deploy Datadog Apps
+
+on:
+  pull_request:
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-datadog-apps.yml'
+  push:
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-datadog-apps.yml'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: deploy-datadog-apps-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lockfile:
+    name: Lockfile consistency
+    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+
+  validate:
+    name: Typecheck & lint
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+
+  changed:
+    name: Detect changed apps
+    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+      any: ${{ steps.detect.outputs.any }}
+      bits-chat-id: ${{ steps.bits-chat.outputs.chat-id }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: detect
+        env:
+          CONTAINER: 'apps'
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          base="$BEFORE"
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            base=$(git hash-object -t tree /dev/null)
+          fi
+          matrix=$(git diff --name-only "$base" "$AFTER" -- "$CONTAINER/" \
+            | awk -F/ 'NF > 1 {print $2}' \
+            | sort -u \
+            | while IFS= read -r name; do
+                if [ -d "$CONTAINER/$name" ]; then echo "$name"; fi
+              done \
+            | jq -R . \
+            | jq -cs '{app: map(select(length > 0))}')
+          count=$(echo "$matrix" | jq '.app | length')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          if [ "$count" -gt 0 ]; then
+            echo "any=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "any=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Changed apps: $matrix"
+      - name: Find the Bits chat for this merge
+        id: bits-chat
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pull_requests=$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls")
+          chat_id=$(jq -r --arg sha "$GITHUB_SHA" '
+            [ .[] | select(.merged_at != null) ]
+            | ((map(select(.merge_commit_sha == $sha)) | first) // first // {})
+            | (.body // "")
+            | (try capture(
+                "<!--[[:space:]]*dd-meta[[:space:]]+(?<metadata>\\{[^\\r\\n]*\\})[[:space:]]*-->"
+              ).metadata catch "")
+            | (try fromjson catch {})
+            | select(
+                (.source == "chat" or .sourceType == "chat")
+                and (.resourceId | type == "string")
+              )
+            | .resourceId // empty
+          ' <<< "$pull_requests")
+          if [[ -n "$chat_id" && ! "$chat_id" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ ]]; then
+            echo "::warning::Ignoring an invalid Bits chat ID in the merged pull request metadata."
+            chat_id=
+          fi
+          echo "chat-id=$chat_id" >> "$GITHUB_OUTPUT"
+
+  upload:
+    name: Upload ${{ matrix.app }}
+    needs:
+      - changed
+      - lockfile
+    if: needs.changed.outputs.any == 'true' && needs.lockfile.result == 'success'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.changed.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Upload ${{ matrix.app }}
+        env:
+          APP: ${{ matrix.app }}
+          DD_API_KEY: ${{ secrets.DATADOG_API_KEY }}
+          DD_APP_KEY: ${{ secrets.DATADOG_APP_KEY }}
+          DD_APPS_BITS_CHAT_ID: ${{ needs.changed.outputs.bits-chat-id }}
+        run: npm run upload -w "apps/$APP"
