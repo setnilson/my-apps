@@ -1,0 +1,143 @@
+.app-shell {
+    align-items: center;
+    background:
+        linear-gradient(135deg, rgba(99, 44, 166, 0.12), transparent 34%),
+        linear-gradient(315deg, rgba(0, 149, 161, 0.12), transparent 40%),
+        #f7f8fb;
+    box-sizing: border-box;
+    color: #1f2933;
+    display: flex;
+    min-height: 100vh;
+    justify-content: center;
+    padding: 32px;
+}
+
+.calculator {
+    background: #ffffff;
+    border: 1px solid #d9dee8;
+    border-radius: 8px;
+    box-shadow: 0 24px 70px rgba(30, 39, 60, 0.16);
+    box-sizing: border-box;
+    display: grid;
+    gap: 18px;
+    max-width: 380px;
+    padding: 22px;
+    width: min(100%, 380px);
+}
+
+.calculator-header {
+    display: grid;
+    gap: 4px;
+}
+
+.eyebrow {
+    color: #6b7280;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.2;
+    margin: 0;
+    text-transform: uppercase;
+}
+
+.calculator h1 {
+    color: #111827;
+    font-size: 28px;
+    line-height: 1.15;
+    margin: 0;
+}
+
+.display {
+    align-items: center;
+    background: #121826;
+    border-radius: 8px;
+    color: #f8fafc;
+    display: flex;
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(30px, 9vw, 46px);
+    font-weight: 700;
+    justify-content: flex-end;
+    min-height: 92px;
+    overflow: hidden;
+    padding: 16px 18px;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.keypad {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.key {
+    align-items: center;
+    appearance: none;
+    background: #eef2f7;
+    border: 1px solid #d7dde8;
+    border-radius: 8px;
+    color: #1f2937;
+    cursor: pointer;
+    display: flex;
+    font: inherit;
+    font-size: 20px;
+    font-weight: 700;
+    justify-content: center;
+    min-height: 58px;
+    padding: 0 8px;
+    transition:
+        background-color 120ms ease,
+        border-color 120ms ease,
+        color 120ms ease,
+        transform 120ms ease;
+}
+
+.key:hover {
+    background: #e1e7f0;
+}
+
+.key:active {
+    transform: translateY(1px);
+}
+
+.key:focus-visible {
+    outline: 3px solid rgba(99, 44, 166, 0.32);
+    outline-offset: 2px;
+}
+
+.key-operator {
+    background: #632ca6;
+    border-color: #632ca6;
+    color: #ffffff;
+}
+
+.key-operator:hover,
+.key-active {
+    background: #4f2384;
+    border-color: #4f2384;
+}
+
+.key-danger {
+    background: #fff0f0;
+    border-color: #ffc9c9;
+    color: #b42318;
+}
+
+.key-danger:hover {
+    background: #ffe2e2;
+}
+
+@media (max-width: 420px) {
+    .app-shell {
+        padding: 16px;
+    }
+
+    .calculator {
+        padding: 16px;
+    }
+
+    .key {
+        font-size: 18px;
+        min-height: 52px;
+    }
+}
